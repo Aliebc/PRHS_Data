@@ -1,0 +1,7 @@
+SgnYear [统计年度] - null
+CountyName [县域名称] - null
+PrefLevCity [所属地级市] - null
+Province [所属省份] - null
+SchoolNum [学校数] - null
+Staff [教职工数] - null
+FullTimeTeacher [专任教师数] - null
