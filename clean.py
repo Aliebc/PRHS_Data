@@ -105,6 +105,19 @@ print(data_wage.dtypes)
 data_wage.to_excel('Clean/CRE_Eplwagct.xlsx', index=False)
 data_wage.to_stata('Clean/CRE_Eplwagct.dta', write_index=False, version=118, variable_labels=data_wage_labels_stata)
 
+# Clean LAND Data
+data_land = pd.read_excel('./Sources/URC_UrbPopConLandCY/URC_UrbPopConLandCY.xlsx')
+data_land.rename(
+    columns={
+        'Sgnyea': 'year',
+        'Ctnm': 'cityName',
+        'Ctnm_id': 'cityCode',
+        'Urbpop': 'urbanPopulation',
+        'Urbcon': 'urbanConstructionLand',
+        'Urbpopden': 'urbanPopulationDensity',
+        'Urbconper': 'urbanConstructionLandPerCapita',
+    },
+
 # Clean CPI Data
 data_cpi = pd.read_excel('./Sources/CRE_Pi01/CRE_Pi01.xlsx')
 data_cpi.rename(
@@ -117,7 +130,7 @@ data_cpi.rename(
     inplace=True
 )
 #print(data_cpi.head())
-data_cpi = data_cpi[['provName', 'provCode', 'year', 'CPI']]
+data_cpi = data_cpi[['provCode', 'year', 'CPI']]
 data_cpi_labels = data_cpi.iloc[:2, :]
 data_cpi_labels = data_cpi_labels.apply(lambda x: x.str.cat(sep='|'))
 data_cpi_labels_stata = dict(data_cpi_labels)
@@ -126,7 +139,6 @@ data_cpi.reset_index(drop=True, inplace=True)
 data_cpi.fillna(-1, inplace=True)
 data_cpi = data_cpi.astype({
     'year': 'int',
-    'provName': 'str',
     'provCode': 'str',
     'CPI': 'float',
 })
@@ -141,10 +153,10 @@ def calibrate_cpi(df):
     df.loc[df['year'] == 2000, 'CPI'] = 100
     # 循环计算CPI
     for i in range(1, len(df)):
-        df.loc[df.index[i], 'CPI'] = df.loc[df.index[i], 'CPI'] / df.loc[df.index[i - 1], 'CPI'] * 100
+        df.loc[df.index[i], 'CPI'] = df.loc[df.index[i], 'CPI'] * df.loc[df.index[i - 1], 'CPI'] / 100
     return df
 
-data_cpi = data_cpi.groupby('provCode').apply(calibrate_cpi, include_groups=False).reset_index(drop=True)
+data_cpi = data_cpi.groupby('provCode').apply(calibrate_cpi, include_groups=True).reset_index(drop=True)
 print(data_cpi.head())
 data_cpi.to_excel('Clean/CRE_Pi01.xlsx', index=False)
 data_cpi.to_stata('Clean/CRE_Pi01.dta', write_index=False, version=118, variable_labels=data_cpi_labels_stata)
@@ -205,6 +217,8 @@ data_hp = data_hp[['cityCode', 'year', 'unitHousePrice']]
 data_wage = data_wage[['cityCode', 'year', 'averageWageOfEmployees', 'primaryIndustryEmploymentShare', 'secondaryIndustryEmploymentShare', 'tertiaryIndustryEmploymentShare']]
 data_panel = data_city.merge(data_hp, on=['cityCode', 'year'], how='left')
 data_panel = data_panel.merge(data_wage, on=['cityCode', 'year'], how='left')
+data_panel = data_panel.merge(data_cpi, on=['provCode', 'year'], how='left')
+print(data_panel.columns)
 #data_panel.fillna(-1, inplace=True)
 # 列排序
 columns_original = data_panel.columns.tolist()
@@ -226,10 +240,18 @@ data_city_labels_stata['unitHousePrice'] = '房价|元每平方米'
 
 data_panel.dropna(subset=['unitHousePrice'], inplace=True)
 data_panel = data_panel[data_panel['unitHousePrice'] > 0]
+data_panel = data_panel[data_panel['averageWageOfEmployees'] > 0]
+
+#生成真实房价和真实工资
+data_panel['realHousePrice'] = data_panel['unitHousePrice'] / data_panel['CPI'] * 100
+data_panel['realWage'] = data_panel['averageWageOfEmployees'] / data_panel['CPI'] * 100
+
+data_city_labels_stata['realHousePrice'] = '真实房价|元每平方米'
+data_city_labels_stata['realWage'] = '真实工资|元'
+data_city_labels_stata['CPI'] = '消费者物价指数|%'
 
 data_panel.to_excel('Clean/PanelData.xlsx', index=False)
 data_panel.to_stata('Clean/PanelData.dta', write_index=False, version=118, variable_labels=data_city_labels_stata)
-
 print('Cleaned data saved to Clean/PanelData')
 
 # 打印出CityCode到CityCode.txt
