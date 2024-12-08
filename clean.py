@@ -1,12 +1,12 @@
 import pandas as pd
 import os
 
-# 判断Clean文件夹是否存在，不存在则创建
+# 判断Clean文件夹是否存在不存在则创建
 
 if not os.path.exists('Clean'):
     os.makedirs('Clean')
 
-#Clean City Data
+# Clean City Data
 # 把前三行合并为一行Sources/CRE_Gdpct/CRE_Gdpct.xlsx
 data_city = pd.read_excel('./Sources/CRE_Gdpct/CRE_Gdpct.xlsx')
 data_city.rename(
@@ -49,6 +49,105 @@ data_city_code = data_city[['cityName', 'cityCode', 'cityType']]
 data_city_code.drop_duplicates(inplace=True)
 data_city_code_dict = dict(zip(data_city_code['cityCode'], data_city_code['cityName']))
 data_city_type_dict = dict(zip(data_city_code['cityCode'], data_city_code['cityType']))
+
+# Clean Wage Data
+data_wage = pd.read_excel('./Sources/CRE_Eplwagct/CRE_Eplwagct.xlsx')
+data_wage.rename(
+    columns={
+        'Ctnm': 'cityName',
+        'Ctnm_id': 'cityCode',
+        'Sgnyea': 'year',
+        'Eect01': 'totalPopulationYearEnd',
+        'Eect02': 'nonAgriculturalPopulationYearEnd',
+        'Eect03': 'naturalPopulationGrowthRate',
+        'Eect04': 'populationDensity',
+        'Eect05': 'employedPersons',
+        'Eect06': 'urbanSelfEmployedWorkers',
+        'Eect08': 'primaryIndustryEmploymentShare',
+        'Eect09': 'secondaryIndustryEmploymentShare',
+        'Eect10': 'tertiaryIndustryEmploymentShare',
+        'Eect11': 'annualAverageNumberOfEmployees',
+        'Eect12': 'totalWagesOfAllEmployees',
+        'Eect13': 'averageWageOfEmployees',
+    },
+    inplace=True
+)
+
+data_wage_labels = data_wage.iloc[:2, :]
+data_wage_labels = data_wage_labels.apply(lambda x: x.str.cat(sep='|'))
+data_wage_labels_stata = dict(data_wage_labels)
+# 合并data_city_labels_stata
+data_city_labels_stata.update(data_wage_labels_stata)
+data_wage = data_wage.iloc[2:, :]
+data_wage.reset_index(drop=True, inplace=True)
+data_wage.fillna(-1, inplace=True)
+
+data_wage = data_wage.astype({
+    'year': 'int',
+    'cityName': 'str',
+    'cityCode': 'str',
+    'totalPopulationYearEnd': 'int',
+    'nonAgriculturalPopulationYearEnd': 'int',
+    'naturalPopulationGrowthRate': 'float',
+    'populationDensity': 'float',
+    'employedPersons': 'int',
+    'urbanSelfEmployedWorkers': 'int',
+    'primaryIndustryEmploymentShare': 'float',
+    'secondaryIndustryEmploymentShare': 'float',
+    'tertiaryIndustryEmploymentShare': 'float',
+    'annualAverageNumberOfEmployees': 'int',
+    'totalWagesOfAllEmployees': 'float',
+    'averageWageOfEmployees': 'float',
+})
+
+print(data_wage.head())
+print(data_wage.dtypes)
+data_wage.to_excel('Clean/CRE_Eplwagct.xlsx', index=False)
+data_wage.to_stata('Clean/CRE_Eplwagct.dta', write_index=False, version=118, variable_labels=data_wage_labels_stata)
+
+# Clean CPI Data
+data_cpi = pd.read_excel('./Sources/CRE_Pi01/CRE_Pi01.xlsx')
+data_cpi.rename(
+    columns={
+        'Sgnyea': 'year',
+        'Prvcnm': 'provName',
+        'Prvcnm_id': 'provCode',
+        'Pi0101': 'CPI',
+    },
+    inplace=True
+)
+#print(data_cpi.head())
+data_cpi = data_cpi[['provName', 'provCode', 'year', 'CPI']]
+data_cpi_labels = data_cpi.iloc[:2, :]
+data_cpi_labels = data_cpi_labels.apply(lambda x: x.str.cat(sep='|'))
+data_cpi_labels_stata = dict(data_cpi_labels)
+data_cpi = data_cpi.iloc[2:, :]
+data_cpi.reset_index(drop=True, inplace=True)
+data_cpi.fillna(-1, inplace=True)
+data_cpi = data_cpi.astype({
+    'year': 'int',
+    'provName': 'str',
+    'provCode': 'str',
+    'CPI': 'float',
+})
+# 同一省份的CPI去年是100, 所以以2000年为基准, 重新校准CPI
+# 比如2002年的CPI是按照2001为100计算的, 所以要重新计算,实际上是2002年的CPI/2001年的CPI*100
+
+def calibrate_cpi(df):
+    df.sort_values(['year'], inplace=True)
+    # 删除2000年以前的数据
+    df = df[df['year'] >= 2000]
+    # 将2000年的CPI设为100
+    df.loc[df['year'] == 2000, 'CPI'] = 100
+    # 循环计算CPI
+    for i in range(1, len(df)):
+        df.loc[df.index[i], 'CPI'] = df.loc[df.index[i], 'CPI'] / df.loc[df.index[i - 1], 'CPI'] * 100
+    return df
+
+data_cpi = data_cpi.groupby('provCode').apply(calibrate_cpi, include_groups=False).reset_index(drop=True)
+print(data_cpi.head())
+data_cpi.to_excel('Clean/CRE_Pi01.xlsx', index=False)
+data_cpi.to_stata('Clean/CRE_Pi01.dta', write_index=False, version=118, variable_labels=data_cpi_labels_stata)
 
 #Clean House Price Data
 data_hp = pd.read_excel('./Sources/HousePrice.xlsx', sheet_name='面板数据')
@@ -103,12 +202,14 @@ print('城市总数:', data_city['cityName'].nunique())
 
 # 合并面板数据
 data_hp = data_hp[['cityCode', 'year', 'unitHousePrice']]
+data_wage = data_wage[['cityCode', 'year', 'averageWageOfEmployees', 'primaryIndustryEmploymentShare', 'secondaryIndustryEmploymentShare', 'tertiaryIndustryEmploymentShare']]
 data_panel = data_city.merge(data_hp, on=['cityCode', 'year'], how='left')
+data_panel = data_panel.merge(data_wage, on=['cityCode', 'year'], how='left')
 #data_panel.fillna(-1, inplace=True)
 # 列排序
 columns_original = data_panel.columns.tolist()
 # cityName, cityCode, year, unitHousePrice 在前
-columns_sorted = ['cityName', 'cityCode', 'provName', 'provCode', 'year', 'unitHousePrice']
+columns_sorted = ['cityName', 'cityCode', 'provName', 'provCode', 'year', 'unitHousePrice', 'averageWageOfEmployees']
 columns_sorted.extend([col for col in columns_original if col not in columns_sorted])
 data_panel = data_panel[columns_sorted]
 
