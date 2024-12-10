@@ -141,10 +141,13 @@ data_land.rename(
         'CityCode': 'cityCode',
         'UrbanConLandArea': 'landArea',
         'ResidentialLand': 'landAreaResidential',
+        'BuiltDistrictArea': 'builtDistrictArea',
+        'UrbanArea': 'urbanArea',
+        'UrbanPop': 'urbanPopulation',
     },
     inplace=True
 )
-data_land = data_land[['cityCode', 'year', 'landArea', 'landAreaResidential']]
+data_land = data_land[['cityCode', 'year', 'landArea', 'landAreaResidential', 'builtDistrictArea', 'urbanArea', 'urbanPopulation']]
 data_land_labels = data_land.iloc[:2, :]
 data_land_labels = data_land_labels.apply(lambda x: x.str.cat(sep='|'))
 data_land_labels_stata = dict(data_land_labels)
