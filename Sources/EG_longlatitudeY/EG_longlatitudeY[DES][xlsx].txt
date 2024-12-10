@@ -1,0 +1,6 @@
+SgnYear [统计年度] - null
+AreaCode [地区代码] - null
+AreaName [地区名称] - null
+longitude [经度] - 东经取正数，西经取负数。
+latitude [纬度] - 北纬取正数，南纬取负数。
+Notes [备注] - 记录区划变更信息。
