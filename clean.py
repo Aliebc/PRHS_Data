@@ -12,9 +12,9 @@ if not os.path.exists('Clean'):
 data_city_labels_stata = {}
 
 # Clean restrict policy data
-data_restrict = dict(json.load(open('./Sources/restriction.json')))
-ctCode = data_restrict.keys()
-isRestrict = data_restrict.values()
+data_restrict_json = dict(json.load(open('./Sources/restriction.json')))
+ctCode = data_restrict_json.keys()
+isRestrict = data_restrict_json.values()
 data_restrict = pd.DataFrame({
     'cityCode': ctCode,
     'isRestrict': isRestrict
@@ -27,6 +27,80 @@ data_city_labels_stata.update({
     'isRestrict': '是否限购(2011)'
 })
 print(data_restrict.head())
+
+# Clean Distance Data
+data_distance = pd.read_excel('./Sources/EG_SpaceDistanceCityY/EG_SpaceDistanceCityY.xlsx')
+data_distance.rename(
+    columns={
+        'SgnYear': 'year',
+        'DistanceBetC': 'distance',
+        'Type': 'distanceType',
+    },
+    inplace=True
+)
+data_distance_matrix = {}
+data_distance_citycode = set(data_distance['CityCodeA'].unique().tolist() + data_distance['CityCodeB'].unique().tolist())
+for cityCode in data_distance_citycode:
+    data_distance_matrix[cityCode] = {}
+
+for i in range(len(data_distance)):
+    data_distance_matrix[data_distance.loc[i, 'CityCodeA']][data_distance.loc[i, 'CityCodeB']] = data_distance.loc[i, 'distance']
+    data_distance_matrix[data_distance.loc[i, 'CityCodeB']][data_distance.loc[i, 'CityCodeA']] = data_distance.loc[i, 'distance']
+#print(data_distance_matrix)
+print(len(data_distance_matrix))
+# cityCode, nDistance, nDistanceType
+data_distance = pd.DataFrame({}, columns=['cityCode', 'nDistance', 'nDistanceType'])
+# 识别出距离最近的限购城市的距离
+for cityCode in data_distance_matrix.keys():
+    restrict_city = [k for k, v in data_restrict_json.items() if v == 1]
+    restrict_distance = [data_distance_matrix[cityCode][k] for k in restrict_city if k in data_distance_matrix[cityCode].keys()]
+    if len(restrict_distance) == 0:
+        nDistance = -1
+        nDistanceType = -1
+    else:
+        nDistance = min(restrict_distance)
+        nDistanceType = 1
+    if cityCode in restrict_city:
+        nDistance = 0
+        nDistanceType = 1
+    data_distance = pd.concat([data_distance, pd.DataFrame({
+        'cityCode': [cityCode],
+        'nDistance': [nDistance],
+        'nDistanceType': [nDistanceType]
+    })])
+data_city_labels_stata.update({
+    'nDistance': '距离最近限购城市的距离',
+    'nDistanceType': '距离最近限购城市的类型'
+})
+print(data_distance.head())
+
+# Clean latitude and longitude data
+data_latlon = pd.read_excel('./Sources/EG_longlatitudeY/EG_longlatitudeY.xlsx')
+data_latlon.rename(
+    columns={
+        'SgnYear': 'year',
+        'AreaCode': 'cityCode',
+        'latitude': 'latitude',
+        'longitude': 'longitude',
+    },
+    inplace=True
+)
+data_latlon.drop_duplicates(subset=['cityCode'], inplace=True)
+data_latlon = data_latlon[['cityCode', 'latitude', 'longitude']]
+data_latlon_labels = data_latlon.iloc[:2, :]
+data_latlon_labels = data_latlon_labels.apply(lambda x: x.str.cat(sep='|'))
+data_latlon_labels_stata = dict(data_latlon_labels)
+data_city_labels_stata.update(data_latlon_labels_stata)
+data_latlon = data_latlon.iloc[2:, :]
+data_latlon.reset_index(drop=True, inplace=True)
+data_latlon = data_latlon.astype({
+    'cityCode': 'str',
+    'latitude': 'float',
+    'longitude': 'float',
+})  
+print(data_latlon.head())
+data_latlon.to_excel('Clean/EG_longlatitudeY.xlsx', index=False)
+data_latlon.to_stata('Clean/EG_longlatitudeY.dta', write_index=False, version=118, variable_labels=data_latlon_labels_stata)
 
 # Clean City Data
 # 把前三行合并为一行Sources/CRE_Gdpct/CRE_Gdpct.xlsx
@@ -266,6 +340,8 @@ data_panel = data_panel.merge(data_wage, on=['cityCode', 'year'], how='left')
 data_panel = data_panel.merge(data_cpi, on=['provCode', 'year'], how='left')
 data_panel = data_panel.merge(data_land, on=['cityCode', 'year'], how='left')
 data_panel = data_panel.merge(data_restrict, on=['cityCode'], how='left')
+data_panel = data_panel.merge(data_latlon, on=['cityCode'], how='left')
+data_panel = data_panel.merge(data_distance, on=['cityCode'], how='left')
     
 print(data_panel.columns)
 #data_panel.fillna(-1, inplace=True)
@@ -306,6 +382,10 @@ def gdp_fix(d: pd.Series):
         d['GDP_PerCapita'] = d['Gdpct01'] / d['totalPopulationYearEnd'] * 10000
     return d
 data_panel = data_panel.apply(gdp_fix, axis=1)
+
+# 生成人口密度 urbanPopulation urbanArea
+data_panel['popDensity'] = data_panel['urbanPopulation'] / data_panel['urbanArea']
+data_city_labels_stata['popDensity'] = '人口密度|人每平方公里'
 
 # 对房价、工资、真实房价、真实工资、建设用地面积、住宅用地面积生成log变量，命令为l+变量名
 for col in ['unitHousePrice', 
