@@ -1,0 +1,7 @@
+SgnYear [统计年度] - null
+CityCodeA [城市A代码] - null
+CityCodeB [城市B代码] - null
+CityNameA [城市A名称] - null
+CityNameB [城市B名称] - null
+DistanceBetC [城市间距离] - 计算两点间距离：记两点经纬度分别为：（LonA，LatA），（LonB，LatB）。R=6371KM，pi=3.14Distance=R*Arccos(C)C=sin(LatA*Pi/180)*sin(LatB*Pi/180)+cos(LatA*Pi/180)*cos(LatB*Pi/180)*cos(LonA*Pi/180-LonB*Pi/180)
+Type [城市关系类型] - 1=同一省内的普通地级市之间；2=地级市与省会城市之间；3=城市群/经济圈内的地级市之间；4=同时满足1和3；5=同时满足2和3。
