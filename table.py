@@ -10,7 +10,7 @@ word_list = {
 }
 
 
-stata.run(r'''
+stata.run(R'''
 use Clean/PanelData.dta, clear
 drop if provCode=="650000"
 drop if year > 2017
